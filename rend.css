@@ -1,0 +1,85 @@
+a {
+	color: inherit;
+	font-weight: bold;
+}
+.container {
+	margin:auto;
+	vertical-align: middle;
+}
+.portrait_link {
+	width: 50px;
+	height: 50px;
+}
+
+.has-toolTip {
+	cursor:pointer;
+}
+
+
+
+.item {
+	width: 350px;
+	padding: 10px;
+	border: 1px solid black;
+}
+.item-collapsed {
+	color:gray;
+	border: 1px solid gray;
+}
+.item-name {
+	font-size: 1.2em;
+	font-weight:bold;
+	cursor:pointer;
+}
+.item-category {
+	text-transform:capitalize;
+}
+.item-desc {
+	font-style:italic;
+}
+
+
+
+.action-table {
+	width:100%;
+}
+.action-button {
+	text-transform:capitalize;
+	font-size: 1.1em;
+	width:100%;
+	padding:10px;
+	background-color:white;
+	cursor:pointer;
+}
+.action-button:disabled {
+	color:inherit;
+	border:none;
+	cursor:default;
+}
+.action-type {
+	font-size: 0.75em;
+	float:right;
+}
+.action-row { }
+
+
+
+.mod-group { padding:5px; }
+.mod-entry { text-transform:capitalize; }
+.passive-mods { text-align:right; }
+.type-mods {
+	border:1px solid gray;
+	padding:5px;
+	margin:1px;
+}
+.type-label {
+	float:right;
+	padding:2px;
+	margin-top:-10px;
+	background-color:white;
+	border:1px solid black;
+}
+
+.player-display { height: 400px; width:600px; float: left;}
+.player-content { width:200px; float:left; }
+.player-gear { float:left; }
