@@ -16,30 +16,6 @@
 $(function (){
 	rend.init();
 	
-	nae = new rend.Player("Naerryn");
-	nae.color = "orange";
-	nae.using = rend.gear.blade;
-	nae.doing = "attack";
-	nae.gear = {
-		"blade": rend.gear.blade,
-		"cannon": rend.gear.cannon,
-		"armor": rend.gear.armor,
-		"robust": rend.gear.robust,
-	}
-	nae.update();
-	
-	keh = new rend.Player("Keh");
-	keh.color = "purple";
-	keh.using = rend.gear.reactive_shield;
-	keh.doing = "defend";
-	
-	nae.target = keh;
-	keh.target = nae;
-	
-	rend.state.players = [nae, keh];
-	rend.state.update();
-	
-	$('body').prepend(rend.showPlayer(nae));
 })
 </script>
 </head>
