@@ -3,30 +3,51 @@ var rend = {};
 
 rend.state = {
 	players: [],
-	active_player: 0,
+	active_index: 0,
+	active_player: undefined,
+	
+	advance: function advance (){
+		this.active_index ++;
+		if (this.active_index >= this.players.length) this.active_index = 0;
+		
+		this.active_player = this.players[this.active_index];
+		this.active_player && this.active_player.ready();
+	},
+	
+	update: function update (){
+		this.active_player = this.players[this.active_index];
+	}
 };
 
 rend.init = function init (){
+	var fragment = location.hash.slice(1);
+	
 	for (key in rend.gear){
 		rend.gear[key].ID = key;
 	}
+	
+	if (fragment){
+		$('body').append(rend.showItem(rend.gear[fragment]));
+	}
 };
+
+
+
+
+
+// Utility Functions
 
 rend.die = function die (sides){
 	return Math.ceil(Math.random() * sides);
 };
 
+rend.has = function has (container, item){
+	return (container.indexOf(item) >= 0);
+};
+
 rend.print = function print (string){
 	$("#log").append($("<p>").append(rend.bbParse(string)));
 	$("#output").text(string);
-};
-
-rend.capitalize = function capitalize (string){
-	return string && string.charAt(0).toUpperCase() + string.slice(1);
-};
-
-rend.itemLink = function itemLink (item){
-	return "[url=http://www.google.com/#q="+ item.ID +"]"+ item.name +"[/url]";
 };
 
 rend.stack = function stack (target, sources, map){
@@ -40,10 +61,47 @@ rend.stack = function stack (target, sources, map){
 	})
 };
 
-rend.mod = function mod (value){
-	if (value >= 0) return "+"+ value;
-	else return "-"+ Math.abs(value);
-};
+
+
+
+
+
+// Formatting Functions
+
+rend.action_button = function action_button (item, action, player){
+	var button = $("<button class='action-button'>"+ action +"</button>")
+	
+	// Not tooltipping for now! Because the types explanation is really long and
+	// it seems a little weird.
+	if (item){
+		button.append("<div class='action-type'>").append(
+			$("<div>"+ item[action].type +"</div>").addClass('action-type'));
+	}
+	
+	button.on('click', function (event){
+		var output = "\n";
+		
+		player.using = item;
+		player.doing = action;
+		
+		output += player[action]();
+		rend.state.advance();
+		
+		output += "\n\n--------------\n\n";
+		
+		rend.state.players.forEach(function (player){
+			output += rend.printStatus(player) + "\n";
+		})
+		
+		rend.print(output);
+	})
+	
+	if (!(player && player.isActive())){
+		button.prop("disabled", true);
+	}
+	
+	return button;
+}
 
 rend.bbParse = function bbParse(string){
 	var regTag, regExp;
@@ -60,6 +118,199 @@ rend.bbParse = function bbParse(string){
 	return string;
 };
 
+rend.capitalize = function capitalize (string){
+	return string && string.charAt(0).toUpperCase() + string.slice(1);
+};
+
+rend.itemLink = function itemLink (item){
+	return "[url="+ location.pathname +"#"+ item.ID +"]"+ item.name +"[/url]";
+};
+
+rend.mod = function mod (value){
+	if (value >= 0) return "+"+ value;
+	else return "-"+ Math.abs(value);
+};
+
+rend.printStatus = function printStatus (player){
+	var output = "",
+			action = player.using && player.using[player.doing];
+	
+	output += player.label();
+	
+	output += " - [color=blue]Suppression "+ player.suppression +"[/color]";
+	if (player.stunned) output += " ([color=red]STUNNED![/color])";
+	
+	output += " | [color=green]Stamina "+ player.stamina + "/"+ player.stamina_max +
+		"[/color]";
+		
+	output += " | [color=orange]Damage "+ player.damage +"[/color]";
+	
+	if (player.recovery_rating < 0){
+		output += " ([color=red]BLEEDING "+ (-player.recovery_rating) +
+			"![/color])";
+	} else {
+		output += " ([color=blue]Recovers "+ player.recovery_rating +
+			"[/color])";
+	}
+	
+	output += "\n [i]Action: ";
+	
+	output += (rend.capitalize(player.doing) || "(IDLE)");
+	
+	if (player.using){
+		output += " with "+ rend.itemLink(player.using);
+		if (action && action.type){
+			output += " - "+ rend.capitalize(action.type);
+		}
+	}
+	
+	output += "[/i]";
+	
+	return output;
+}
+
+rend.showItem = function showItem (item, player, hide){
+	var div = $("<div class='item'>"),
+			header = $("<div class='item-name'>"+ item.name +"</div>"),
+			content = $("<div class='item-content'>"),
+			table = $("<table class='action-table'>"),
+			row;
+			
+	div.append(header);
+	header.on("click", function (event){
+		content.toggle('blind');
+		div.toggleClass('item-collapsed', 'fade');
+	})
+	
+	div.append(content);
+	
+	if (hide){ 
+		content.hide();
+		div.addClass('item-collapsed');
+	}
+	
+	content.append("<div class='item-category'>"+item.job +" - "+
+		item.category +"</div>");
+	content.append("<div class='item-desc'>"+ item.desc +"</div>");
+	
+	if (item.passive){
+		content.append(rend.showMods(item.passive).addClass('passive-mods'));
+	}
+	
+	content.append(table);
+	if (item.attack){
+		row = $("<tr class='action-row'>")
+		table.append(row);
+		row.append($("<td>").append(rend.action_button(item, "attack", player)));
+		row.append($("<td>").append(rend.showMods(item.attack).addClass('action-mods')));
+	}
+	if (item.defend){
+		row = $("<tr class='action-row'>")
+		table.append(row);
+		row.append($("<td>").append(rend.action_button(item, "defend", player)));
+		row.append($("<td>").append(rend.showMods(item.defend).addClass('action-mods')));
+	}
+	
+	if (item.rest){
+		row = $("<tr class='action-row'>")
+		table.append(row);
+		row.append($("<td>").append(rend.action_button(item, "rest", player)));
+		row.append($("<td>").append(rend.showMods(item.rest).addClass('action-mods')));
+	}
+	
+	return div;
+};
+
+rend.showMods = function showMods (object){
+	var div = $("<div class='mod-group'>"),
+			mods = [];
+	
+	if (!object) return div;
+	
+	for (key in object){
+		if (rend.has(cfg.all_mods, key)){
+			mods.push({name: key, value: object[key]});
+		}
+	};
+	
+	mods.sort(function (a, b){
+		return cfg.all_mods.indexOf(a.name) - cfg.all_mods.indexOf(b.name)
+	});
+	
+	mods.forEach(function (mod){
+		if (!mod.value) return;
+		var name = rend.toolTip(mod.name.replace("_", " "), mod.name);
+		div.append($("<div class='mod-entry'>"+ rend.mod(mod.value) +
+			" </div>").append(name));
+	});
+	
+	if (object.vs_types){
+		for (type in object.vs_types){
+			div.append(rend.showMods(object.vs_types[type]).addClass("type-mods").append(
+				"<div class='type-label'> vs "+ rend.capitalize(type) +"</div>"));
+		};
+	}
+	
+	return div;
+};
+
+rend.showPlayer = function showPlayer (player){
+var div = $("<div class='player-display'>"),
+		content = $("<div class='player-content'>"),
+		gear = $("<div class='player-gear'>");
+	
+	div.append(content, gear);
+	
+	content.append("<div class='player-name'>"+ player.name +"</div>");
+	content.append("<div class='player-job'>"+ player.job +"</div>");
+	
+	content.append("<div class='stat player-suppression'>Suppression: "+
+		"<span class='stat-suppression'>"+ player.suppression +"</span></div>");
+		
+	content.append("<div class='stat player-stamina'>Stamina: "+
+		"<span class='stat-stamina'>"+ player.stamina +"</span>/"+
+		"<span class='stat-stamina_max'>"+ player.stamina_max +"</span></div>");
+		
+	content.append("<div class='stat player-damage'>Damage: "+
+		"<span class='stat-damage'>"+ player.damage +"</span></div>");
+		
+	content.append("<div class='stat player-recover'>Recovery: "+
+		"<span class='stat-recovery'>"+ player.recovery_rating +"</span></div>");	
+	
+	content.append(rend.showMods(player.passives));
+	
+	Object.keys(player.gear).forEach(function (key){
+		gear.append(rend.showItem(player.gear[key], player, true));
+	})
+	
+	return div;
+}
+
+rend.toolTip = function toolTip (string, ref){
+	ref = ref || string;
+	
+	var span = $("<span class='has-toolTip'>"+ 
+		string +"</span>");
+	span.tooltip({ 
+		content: cfg.toolTips[ref],
+		show: { delay: 500 },
+		items: "span",
+	});
+	
+	return span;
+};
+
+
+
+
+
+
+
+
+
+
+
+
 rend.Player = function Player (name){
 	if (name) this.name = name;
 	
@@ -69,6 +320,7 @@ rend.Player = function Player (name){
 	this.update();
 }; rend.Player.prototype = {
 	name: "Player",
+	job: "pilot",
 	
 	suppression: 1,
 	stamina: cfg.scale,
@@ -80,8 +332,6 @@ rend.Player = function Player (name){
 	using: undefined,
 	stunned: false,
 	
-	show_portrait: false,
-	
 	label: function label (){
 		var output = "";
 		
@@ -92,12 +342,17 @@ rend.Player = function Player (name){
 		return output;
 	},
 	
+	isActive: function isActive (){
+		return rend.state.active_player == this;
+	},
+	
 	update: function update (){
 		
 		// Pull in passive mods!
 		this.passives = { vs_types: {} };
 		
 		for (item in this.gear){
+			if (!this.gear[item].passive) continue;
 		
 			rend.stack(this.passives, [this.gear[item].passive], cfg.all_mods);
 			
@@ -134,65 +389,22 @@ rend.Player = function Player (name){
 	},
 	
 	ready: function ready (){
-	
 		// Apply Bleed!
 		if (this.recovery_rating < 0){
 			this.suppression -= this.recovery_rating;
 		}
-	},
-	
-	status: function status (){
-		var output = "",
-				action = this.using && this.using[this.doing];
 		
-		output += this.label();
+		this.doing = undefined;
+		this.using = undefined;
 		
-		output += " - [color=blue]Suppression "+ this.suppression +"[/color]";
-		if (this.stunned) output += " ([color=red]STUNNED![/color])";
-		
-		output += " | ";
-		
-		output += "[color=green]Stamina "+ this.stamina + "/"+ this.stamina_max +
-			"[/color]";
-			
-		output += " | ";	
-			
-		output += "[color=orange]Damage "+ this.damage +"[/color]";
-		
-		if (this.recovery_rating < 0){
-			output += " ([color=red]BLEEDING "+ (-this.recovery_rating) +
-				"![/color])";
-		} else {
-			output += " ([color=blue]Recovers "+ this.recovery_rating +
-				"[/color])";
-		}
-		
-		output += "\n [i]Action: ";
-		
-		output += (rend.capitalize(this.doing) || "(IDLE)");
-		
-		if (this.using){
-			output += " with "+ rend.itemLink(this.using);
-			if (action && action.type){
-				output += " ("+ rend.capitalize(action.type) +")";
-			}
-		}
-		
-		output += "[/i]";
-		
-		return output;
-	},
-	
-	edit_div: function element (){
-		var div = "<div>",
-				name = "<input type='text' class='name'></input>";
-				
-		return div;
+		this.update();
 	},
 
-	attack: function attack (target){
+	attack: function attack (){
 		var roll, weight, result,
 				mods = {},
+				
+				target = this.target;
 				
 				attack = this.using && this.using[this.doing] || {},
 				defense = target.using && target.using[target.doing] || {},
@@ -213,7 +425,7 @@ rend.Player = function Player (name){
 			this.passives.vs_types[defense.type],
 		], cfg.attack_mods);
 		
-		//...ad defense modifiers...
+		//...add defense modifiers...
 		rend.stack(mods, [
 			defense, 
 			defense.vs_types && defense.vs_types[attack.type],
@@ -238,7 +450,7 @@ rend.Player = function Player (name){
 		
 		// Now that we've got the roll, actually resolve the attack!
 		if (result > target.suppression){
-		// If we missed, increase suppression!
+		// If we missed, increase the target's suppression!
 			target.suppression = result;
 			
 			output += " and [color=blue][i]misses![/i][/color]";
@@ -318,7 +530,6 @@ rend.Player = function Player (name){
 			};
 			
 			//...and we're done!
-			
 		}
 		
 		this.stamina -= 1;
@@ -330,9 +541,14 @@ rend.Player = function Player (name){
 	},
 	
 	defend: function defend (){
-		this.suppression -= this.recover_rating;
+		var effect = Math.max(this.recover_rating, 0);
+		this.suppression -= effect;
 		this.stamina -= 1;
 		this.update();
+		
+		return this.label() +" defends with "+ rend.itemLink(this.using) +"!"+
+			"\n[i]"+ this.name +"'s [color=blue]Suppression reduced by "+ effect +
+			"[/color].[/i]";
 	},
 	
 	rest: function rest (){

@@ -3,23 +3,9 @@
 <html>
 <head>
 <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.css">
+<link rel="stylesheet" href="./rend.css">
 <style>
 
-a {
-	color: inherit;
-	text-decoration: inherit;
-	font-weight: bold;
-}
-
-.container {
-	margin:auto;
-	vertical-align: middle;
-}
-
-.portrait_link {
-	width: 50px;
-	height: 50px;
-}
 </style>
 <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
 <script src="http://code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
@@ -31,21 +17,34 @@ $(function (){
 	rend.init();
 	
 	nae = new rend.Player("Naerryn");
-	//nae.show_portrait = true;
 	nae.color = "orange";
 	nae.using = rend.gear.blade;
 	nae.doing = "attack";
-
+	nae.gear = {
+		"blade": rend.gear.blade,
+		"cannon": rend.gear.cannon,
+		"armor": rend.gear.armor,
+		"robust": rend.gear.robust,
+	}
+	nae.update();
+	
 	keh = new rend.Player("Keh");
-	//keh.show_portrait = true;
 	keh.color = "purple";
-	keh.using = rend.gear.blade;
+	keh.using = rend.gear.reactive_shield;
 	keh.doing = "defend";
+	
+	nae.target = keh;
+	keh.target = nae;
+	
+	rend.state.players = [nae, keh];
+	rend.state.update();
+	
+	$('body').prepend(rend.showPlayer(nae));
 })
 </script>
 </head>
 <body>
-<div id='log'></div>
 <textarea id='output'></textarea>
+<div id='log'></div>
 </body>
 </html>
