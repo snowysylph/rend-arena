@@ -1,35 +1,68 @@
 var cfg = {};
 
 cfg.scale = 6;
+cfg.stamina_cost = 1;
+cfg.linkPath = location.pathname;
+
+cfg.defaults = {
+	stamina_cost: -1,
+	rest_suppression: -1,
+	rest_stamina: 2,
+}
+
+cfg.core_stats = [
+	"suppression",
+	"stamina",
+	"damage",
+];
+
 cfg.attack_types = [
 	"area",
 	"direct",
 	"guided",
 	"melee",
 ];
+// Modifiers that apply when you perform an action!
+cfg.action_mods = [
+	"attack_weight", 
+	"concussive",
+	"disruptive",
+	"recoil",
+	"stamina_cost",
+];
+
 cfg.defense_types = [
 	"block",
 	"evade",
 	"hazard",
 	"parry",
 ];
-cfg.attack_mods = [
-	"attack_weight", 
-	"concussive",
-	"disruptive",
-	"recoil",
-];
-cfg.defense_mods = [
+
+// Modifiers that apply when someone targets you with an action!
+cfg.reaction_mods = [
 	"defense_weight", 
 	"deflection", 
 	"toughness", 
 	"kickback", 
 	"feedback",
 ];
+
+// Modifiers that apply outside of actions (updates, etc).
 cfg.misc_mods = [
+	"stun_threshold",
 	"max_stamina",
 ];
-cfg.all_mods = [].concat(cfg.attack_mods, cfg.defense_mods, cfg.misc_mods);
+
+// Keeps 'em in order!
+cfg.all_mods = [].concat(cfg.action_mods, cfg.reaction_mods, cfg.misc_mods);
+
+cfg.printColors = {
+	suppression: "blue",
+	stamina: "green",
+	damage: "orange",
+	alert: "red",
+};
+
 cfg.bbTags = {
 	"[b]": "<b>",
 	"[/b]": "</b>",
@@ -64,7 +97,20 @@ cfg.bbTags = {
 			"class='portrait_link'>"+
 			"</a>";
 	},
-}
+};
+
+// Valid BBCode Colors!
+cfg.bbColors = [
+	"red",
+	"orange",
+	"yellow",
+	"blue",
+	"purple",
+	"pink",
+	"white",
+	"gray",
+	//"black" is disabled because a) everyone'll choose it and b) nobody'll see it. 
+];
 
 cfg.toolTips = {
 
