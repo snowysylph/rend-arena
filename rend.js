@@ -29,49 +29,35 @@ rend.roll = function roll (sides){
 };
 
 rend.has = function has (container, item){
+	if (!Array.isArray(container)) return false;
 	return (container.indexOf(item) >= 0);
 };
 
-rend.print = function print (string){
-	$("#log").append($("<p>").append(rend.bbParse(string)));
-	$("#output").text(string);
-};
-
-rend.hasValues = function hasValues (object){
+rend.hasValues = function hasValues (object, ignore){
 	for (key in object){
-		if (object[key]) return true;
+		if (object[key] && !rend.has(ignore, key)) return true;
 	}
 	return false;
 };
 
-rend.stack = function stack (target, sources, keys){
+rend.print = function print (string){
+	$("#log").append($("<p>").append(bb.parse(string)));
+	$("#output").text(string);
+};
+
+rend.stack = function stack (target, sources){
 	if (!Array.isArray(sources)) sources = [sources];
 	
 	sources.forEach(function (source){
-		if (!(source && rend.hasValues(source))) return;
+		if (!source) return;
 		
-		if (!keys){
-			for (key in source){
-				if (typeof source[key] == "number"){
-					target[key] = (target[key] || 0) + (source[key]);
-				}
+		for (key in source){
+			if (source[key] && typeof source[key] == "number"){
+				target[key] = (target[key] || 0) + (source[key]);
 			}
-		} else {
-			keys.forEach(function (key){
-				if (typeof source[key] == "number"){
-					target[key] = (target[key] || 0) + (source[key]);
-				}
-			})
 		}
 	})
 };
-
-rend.arrayWrap = function arrayWrap (value){
-	if (Array.isArray(value)) return value;
-	else return [value];
-}
-
-
 
 
 // Formatting Functions
@@ -80,22 +66,7 @@ rend.bbColor = function bbColor (value){
 	return "[color="+ cfg.printColors[value] +"]";
 };
 
-rend.bbParse = function bbParse(string){
-	var regTag, regExp;
-	
-	string = string || "";
-	
-	for (tag in cfg.bbTags){
-		regTag = tag.replace( /\[/g , "\\[").replace( /\]/g , "\\]");
-		regExp = new RegExp(regTag, "gi");
-
-		string = string.replace(regExp, cfg.bbTags[tag]);
-	}
-	
-	return string;
-};
-
-rend.capitalize = function capitalize (string){
+rend.capWord = function capWord (string){
 	return string && string.charAt(0).toUpperCase() + string.slice(1);
 };
 
@@ -103,28 +74,29 @@ rend.linkItem = function itemLink (item){
 	return "[url="+ cfg.linkPath +"#"+ item.key +"]"+ item.name +"[/url]";
 };
 
-rend.mod = function mod (value){
+rend.prefix = function prefix (value){
 	if (value >= 0) return "+"+ value;
 	else return "-"+ Math.abs(value);
 };
 
-rend.printValues = function printValues (object, options){
+rend.printList = function printList (object, options){
 	var count = 0,
-			output = "";
-			
-	options = options || {};		
-	options.showAlways = rend.arrayWrap(options.showAlways);
-	options.keys = options.keys || cfg.core_stats;
+			output = "",
+			keys;
+	
+	keys = options.keys || Object.keys(object).sort();
 	options.separator = options.separator || ", ";
 	
-	options.keys.forEach(function(key){
+	keys.forEach(function (key){
 		if (!(object[key] || rend.has(options.showAlways, key))) return;
-		count ++
+		if (rend.has(options.showNever, key)) return;
+		
+		count ++;
 		if (count > 1) output += options.separator;
-
-		output += rend.bbColor(key) + (object[key] || 0) +" "+ 
-			rend.capitalize(key) +"[/color]";
-	})
+		
+		output += rend.bbColor(key) + (object[key] || 0) +" "+
+			rend.capWord(key) +"[/color]";
+	});
 	
 	return output;
 };
@@ -153,13 +125,11 @@ rend.Player = function Player (name, job){
 	if (name) this.name = name;
 	this.job = job || this.job;
 	
-	this.gear = {};
-	this.passives = { vs_types: {} };
+	this.talents = {};
 	
 	this.update();
 }; rend.Player.prototype = {
 	name: "Player",
-	job: "pilot",
 	
 	doing: undefined,
 	using: undefined,
@@ -172,22 +142,48 @@ rend.Player = function Player (name, job){
 	stamina_max: cfg.scale,
 	damage: 0,
 	
+	action: function (type){
+		var output = {},
+				action = this.using && this.using[this.doing];
+	
+		if (typeof type != "undefined"){
+			rend.stack(output, [
+				action,
+			])
+		} else {
+			rend.stack(output, [
+				action && action._vs && action._vs[type],
+			])
+		}
+		
+		return;
+	},
+	
+	defense: function (type){
+		var output = {},
+				defense = this.using && this.using["defense"];
+	
+		if (typeof type != "undefined"){
+			rend.stack(output, [
+				defense,
+				this.passives.defense,
+			])
+		} else {
+			rend.stack(output, [
+				action && action._vs && action._vs[type],
+				this.passives.defense._vs[type],
+			])
+		}
+		
+		return;
+	},
+	
 	recovery: function (){
 		return this.stamina - this.damage;
 	},
-	isStunned: function (){
-		return this.suppresion > this.stun_threshold;
-	},
 	
-	execute: function execute (actionName){
-		var action = rend.actions[actionName],
-				event;
-				
-		if (action.targeted) event = action.declare(this, this.target);
-		else event = action.declare(this);
-		
-		action.resolve(event);
-		return action.print(event);
+	isStunned: function (){
+		return this.suppression > this.stun_threshold;
 	},
 	
 	init: function init (){
@@ -211,27 +207,10 @@ rend.Player = function Player (name, job){
 	},
 	
 	update: function update (){
-		// Reset passive mods...
-		this.passives = {
-			vs_types: {},
-		};
-		
-		//...then pull in passive mods in from equipped gear!
-		for (item in this.gear){
-			var mods = this.gear[item].passive;
-			if (!mods) continue;
-		
-			rend.stack(this.passives, mods, cfg.all_mods);
-			
-			for (type in mods.vs_types){
-				this.passives.vs_types[type] = this.passives.vs_types[type] || {};
-				rend.stack(this.passives.vs_types[type], mods.vs_types[type], cfg.all_mods);
-			};
-		}
 		
 		// Calculate max stamina and stun threshold.
-		this.stun_threshold = cfg.scale + (this.passives.stun_threshold || 0);
-		this.stamina_max = cfg.scale + (this.passives.stamina_max || 0);
+		this.stun_threshold = cfg.scale;
+		this.stamina_max = cfg.scale;
 		
 		// Make sure suppression and stamina respect their minimums.
 		this.suppression = Math.max(this.suppression, this.suppression_min);
@@ -285,21 +264,17 @@ rend.Player = function Player (name, job){
 				"![/color])";
 		}
 	
-		output += "\n [i]Action: ";
-	
-		output += (rend.capitalize(this.doing) || "(IDLE)");
+		/*
+		output += "\n [i]Action: " + (rend.capWord(this.doing) || "(IDLE)")
 		
-		var action = this.using && this.using[this.doing];
-	
 		if (this.using){
 			output += " with "+ rend.linkItem(this.using);
-			if (action && action.type){
-				output += " - "+ rend.capitalize(action.type);
+			if (this.action && this.action.type){
+				output += " - "+ rend.capWord(this.action.type);
 			}
 		}
-	
 		output += "[/i]";
-	
+		*/
 		return output;
 	}
 }

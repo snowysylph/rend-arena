@@ -1,324 +1,258 @@
 rend.actions = {};
 
-rend.actions.attack = {
+rend.phases = {
 
-	targeted: true,
-	
-	"declare": function attack_declare (actor, target){
+	declare: function declare (actor, action){
 		var event = {
-					actor: actor,
-					target: target,
-				},
-				action = actor.using && event.actor.using[actor.doing] || {},
-				reaction = actor.using && event.target.using[target.doing] || {};
-		
-		event.roll = rend.roll(cfg.scale);
+			actor: actor,
+			action: action,
+			mods: {},
+			effects: [],
+		};
 	
-		// Grab attack modifiers...
-		rend.stack(event, [
-			action,
-			actor.passives,
-			action.vs_types && action.vs_types[reaction.type],
-			actor.passives.vs_types[reaction.type],
-		], cfg.action_mods);
+		rend.stack(event.mods, actor.action());
+	
+		if (event.action.rolls){
+			event.weight = (event.mods.attack_weight || 0);
+			event.raw = rend.roll(cfg.scale);
+			event.roll = event.raw + event.weight;
+		}
+		return event;
+	},
+
+	target: function target (event, target){
+		event.target = target;
+		var action_type = event.actor.action().type,
+				defense_type = event.target.defense().type;
+	
+		rend.stack(event.mods, [
+			target.defense(),
+			action_type && target.defense(action_type),
+			defense_type && event.actor.action(defense_type),
+		]);
 		
-		//...and defense modifiers.
-		rend.stack(event, [
-			reaction, 
-			target.passives,
-			reaction.vs_types && reaction.vs_types[action.type],
-			target.passives.vs_types[action.type],
-		], cfg.reaction_mods);
-		
-		event.weight = event.attack_weight || 0 - event.defense_weight || 0;
-		event.roll_weighted = event.roll + event.weight;
-		
+		if (event.action.rolls){
+			// Redo weight calculations!
+			event.weight = (event.mods.attack_weight || 0) - 
+										 (event.mods.defense_weight || 0);
+			event.roll = event.raw + event.weight;
+		}
+	
 		return event;
 	},
 	
-	"resolve": function attack_resolve (event){
-		
-		event.target_effects = { damage: 0 };
+	resolve: function resolve (event){
 		event.actor_effects = {};
-		event.actor_costs = {
-			stamina: cfg.defaults.stamina_cost,
-		};
+		event.actor_costs = {};
+		event.target_effects = {};
 		
-		if (event.roll_weighted > event.target.suppression){
-		// Resolve misses!
-			event.result = "miss";
-			rend.stack(event.target_effects, {
-				suppression: event.roll_weighted - event.target.suppression,
-			});
-		} else {
-		// Resolve hits!
-			
-			if (event.roll_weighted == event.target.suppression){
-			// Use reduced damage and suppression for a glancing hit.
-				event.result = "glancing_hit";
-				rend.stack(event.target_effects, {
-					damage: 1,
-					suppression: 1,
-				});
-			} else {
-			// Use full damage for a clean hit!
-				event.result = "hit";
-				rend.stack(event.target_effects, {
-					damage: event.roll_weighted,
-				});
-			}
-			
-			// Add bonus effects...
-			rend.stack(event.target_effects, {
-				suppression: event.concussive,
-				stamina: event.disruptive,
-			});
-			
-			// Apply damage mitigation (in order!)
-			// Deflection: converts damage to suppression!
-			var deflection = Math.min(
-				event.deflection || 0,
-				event.target_effects.damage
-			);
-			rend.stack(event.target_effects, {
-				damage: -deflection,
-				suppression: deflection,
-			})
-			
-			// Deflection: converts damage to stamina drain!
-			var toughness = Math.min(
-				event.toughness || 0,
-				event.target_effects.damage,
-				// Pre-emptively check stamina damage to make sure we aren't spending
-				// more stamina than we (will) have.
-				Math.max(event.target.stamina - event.target_effects.stamina, 0)
-			);
-			rend.stack(event.target_effects, {
-				damage: -toughness,
-				stamina: -toughness,
-			});
-			
-			
-			// Counterattack effects!
-			rend.stack(event.actor_effects, {
-				suppression: event.kickback,
-				stamina: event.feedback,
-			})
-		}
+		event.action.resolve(event);
 		
-		rend.stack(event.actor_costs, {
-			suppression: event.recoil,
-			stamina: event.stamina_cost,
+		rend.mods.forEach(function (mod){
+			var value = event.mods[mod.name]; 
+			if (value && mod.effect) mod.effect(event, value);
 		})
 		
-		// ...and apply the results to the participants!
-		rend.stack(event.target, event.target_effects);
-		rend.stack(event.actor, event.actor_effects);
-		rend.stack(event.actor, event.actor_costs);
+		rend.stack(event.actor, [
+			event.actor_effects,
+			event.actor_costs,
+		])
+		
+		if (event.target) {
+			rend.stack(event.target, event.target_effects)
+		};
 		
 		return event;
 	},
 	
-	"print": function attack_print (event){
-		var output = "";
-		
-		output += event.actor.printName() +" attacks";
-		if (event.actor.using) output += " with "+ rend.linkItem(event.actor.using);
-		// Maybe add something mentioning the defense item here?	
-			
-		// Print out deets on our roll!
-		output += " ([color="+ cfg.printColors.damage +"]"+
-			event.roll + rend.mod(event.weight) +"="+ event.roll_weighted +"[/color])";
-		
-		// Tell us what happened!
-		output += " and ";
-		switch (event.result){
-			case "miss":
-				output += rend.bbColor("suppression") +"[i]misses![/i][/color]";
-				break;
-			case "glancing_hit":
-				output += "lands a "+ rend.bbColor("damage") +"[i]glancing hit![/i][/color]";
-				break;
-			case "hit":
-				output += rend.bbColor("alert") +"[i]hits![/i][/color]";
-				break;
-			// Eh, throw in a default error message just in case.
-			default:
-				output += rend.bbColor("alert") +"apparently forgot to set event.result!"+
-					"[/color]";
-				break;
-		};
-		
-		// Report on what the attack actually did!
-		output += "[i]";
-		if (event.result == "miss"){
-			// Prints 'increased to' instead of the delta for clarity about what misses
-			// actually do.
-			output += "\n"+ event.target.name +"'s " +rend.bbColor("suppression") +
-				"Suppression increased to "+ event.target.suppression +".[/color]";
-		} else {
-		
-			// Report target effects (always show 'damage,' even if we didn't do any!)
-			output += "\n"+ event.target.name +" recieves " +
-				rend.printValues(event.target_effects, {showAlways: "damage"}) +".";
-			
-			// Report actor effects, if any.
-			if (rend.hasValues(event.actor_effects)){
-				output += "\n"+ event.actor.name +" recieves "+
-					rend.printValues(event.actor_effects) +"."
-			};
-		};
-		
-		// Invert stamina cost, since you're 'spending' it.
-		event.actor_costs.stamina *= -1;
-		
-		//Report actor costs. Always show stamina, even if the action was free.
-		output += "\n"+ event.actor.name +" spends "+
-			rend.printValues(event.actor_costs, {
-				showAlways: "stamina",
-				noMod: true,
-			}) +"."
-		
-		output += "[/i]";
-		
-		return output;
+	print: function print (event){
+		rend.print(event.action.print(event));
 	},
 }
 
-rend.actions.defend = {
-	targeted: false,
-	"declare": function defend_declare (actor){
-		var event = { actor: actor },
-				action = actor.using && actor.using[actor.doing];
-		
-		// Grab attack modifiers...
-		rend.stack(event, [
-			action,
-			actor.passives,
-		], cfg.action_mods);
-		
-		// Note: this doesn't actually return a roll result yet. I may have to put
-		// one in if we go simultaneous.
-		
-		return event
-	},
-	
-	"resolve": function defend_resolve (event){
-		
-		event.actor_effects = { suppression: 0};
-		event.actor_costs = {
-			stamina: cfg.defaults.stamina_cost,
-		};
-		
-		if (event.actor.recovery() > 0){
-			// Basic effect! Reduce Suppression by recovery rating.
-			rend.stack(event.actor_effects, {
-				suppression: -1 * Math.min(
-					event.actor.recovery(), 
-					event.actor.suppression - 1
-				)
-			});
-		}
-		
-		// Use standard actor cost stuff, just in case.
-		rend.stack(event.actor_costs, [{
-			suppression: event.recoil,
-			stamina: -event.stamina_cost,
-		}])
-		
-		// Apply effects!
-		rend.stack(event.actor, event.actor_effects);
-		rend.stack(event.actor, event.actor_cost);
-		
-		return event;
-	},
-	
-	"print": function defend_print (event){
-		var output = "";
-		
-		output += event.actor.printName() +" defends"
-		if (event.actor.using) output += " with "+ rend.linkItem(event.actor.using);
-		output += "!"
-		
-		// Invert suppression 'cause we're "recovering" it...
-		event.actor_effects.suppression *= -1;
-		
-		output += "[i]";
-		// Report actor effects.
-		output += "\n"+ event.actor.name +" recovers "+
-			rend.printValues(event.actor_effects, {
-				showAlways: "suppression",
-				noMod: true,
-			}) +"."
-		
-		// Invert stamina cost, since we're "spending" it.
-		event.actor_costs.stamina *= -1;
-		
-		//Report actor costs. Always show stamina, even if the action was free.
-		output += "\n"+ event.actor.name +" spends "+
-			rend.printValues(event.actor_costs, {
-				showAlways: "stamina",
-				noMod: true,
-			}) +"."
-		
-		output += "[/i]";
-		
-		return output;
-	},
-};
+rend.actions = {
 
-rend.actions.rest = {
-	targeted: false,
-	
-	"declare": function rest_declare (actor){
-		var event = { actor: actor },
-				action = actor.using && actor.using[actor.doing];
+	"attack": {
+		targeted: true,
+		rolls: true,
+		resolve: function resolve_attack (event) {
+			event.actor_costs.stamina = -1;
 		
-		// Grab attack modifiers...
-		rend.stack(event, [
-			action,
-			actor.passives,
-		], cfg.action_mods);
+			if (event.roll > event.target.suppression){
+			// It's a miss! 
+				event.result = "miss";
+				event.target_effects.suppression = event.roll - event.target.suppression;
+			} else if (event.roll == event.target.suppression){
+			// A glancing hit!
+				event.result = "glancing_hit";
+				event.isHit = true;
+				event.target_effects.suppression = 1;
+				event.target_effects.damage = 1;
+			} else {
+			// A hit!
+				event.result = "hit";
+				event.isHit = true;
+				event.target_effects.damage = event.roll;
+			}
+		},
 		
-		return event;
+		print: function print_attack (event){
+			var output = "";
+		
+			output += event.actor.printName() +" attacks";
+			if (event.actor.using) output += " with "+ rend.linkItem(event.actor.using);
+			// Maybe add something mentioning the defense item here?	
+			
+			// Print out deets on our roll!
+			output += " ([color="+ cfg.printColors.damage +"]"+
+				event.roll + rend.prefix(event.weight) +"="+ event.roll_weighted +"[/color])";
+		
+			// Tell us what happened!
+			output += " and ";
+			switch (event.result){
+				case "miss":
+					output += rend.bbColor("suppression") +"[i]misses![/i][/color]";
+					break;
+				case "glancing_hit":
+					output += "lands a "+ rend.bbColor("damage") +"[i]glancing hit![/i][/color]";
+					break;
+				case "hit":
+					output += rend.bbColor("alert") +"[i]hits![/i][/color]";
+					break;
+			};
+			
+			output += "[i]";
+			if (event.result == "miss"){
+			// If our attack missed, print Suppression gain explicitly to make it
+			// clear how this works.
+				output += "\n"+ event.target.name +"'s"+
+					rend.bbColor("suppression")+ " Suppression increased to "+
+					event.target.suppression +"[/color].";
+			} else {
+			// If the attack hit, just print what it did.
+				output += "\n"+ event.target.name +" recieves "+
+					rend.printList(event.target_effects, { showAlways: ["damage"] }) +".";
+					
+				if (rend.hasValues(event.actor_effects)){
+					output += "\n"+ event.actor.name +" recieves "+
+						rend.printList(event.actor_effects) +".";
+				}
+			}
+			
+			// Invert stamina cost 'cause we're 'spending' it. 
+			event.actor_costs.stamina *= -1;
+			output += "\n"+ event.actor.name +" spends "+
+				rend.printList(event.actor_costs, { showAlways: ["stamina"] }) +".";
+			output += "[/i]";
+			
+			return output;
+		},
 	},
 	
-	"resolve": function rest_resolve (event){
-		event.actor_effects = {
-			suppression: cfg.defaults.rest_suppression,
-			stamina: cfg.defaults.rest_stamina,
-		};
+	"recover": {
+		targeted: false,
+		rolls: false,
+		resolve: function (event) {
+			event.actor_costs.stamina = -1;
+			event.actor_effects.suppression = -event.actor.recovery();
+		},
 		
-		event.actor_effects.suppression = Math.max(
-			event.actor_effects.suppression,
-			-(event.actor.suppression - event.actor.suppression_min)
-		)
-		
-		event.actor_effects.stamina = Math.min(
-			event.actor_effects.stamina,
-			event.actor.stamina_max - event.actor.stamina
-		)
-		
-		rend.stack(event.actor, event.actor_effects);
-		return event;
+		print: function (event) {
+			var output = "";
+			
+			output += event.actor.printName() +" recovers![i]";
+
+			output += "\n"+ event.actor.name +" recieves "+
+				rend.printList(event.actor_effects, { showAlways: ["suppression"] }) +".";
+					
+			// Invert stamina cost 'cause we're 'spending' it. 
+			event.actor_costs.stamina *= -1;
+			output += "\n"+ event.actor.name +" spends "+
+				rend.printList(event.actor_costs, { showAlways: ["stamina"] }) +".";
+			output += "[/i]";	
+					
+			return output;
+		},
 	},
 	
-	"print": function rest_print (event){
-		var output = "";
-		
-		output += event.actor.printName() +" rests";
-		if (event.actor.using) output += " with "+ rend.linkItem(event.actor.using);
-		output += "!";
-		
-		// Invert suppression 'cause we're "recovering" it...
-		event.actor_effects.suppression *= -1;
-		
-		output += "\n[i]"+ event.actor.name +" recovers "+
-			rend.printValues(event.actor_effects, {
-				showAlways: ["suppression", "stamina"],
-				noMod: true,
-			}) +".[/i]"
-		
-		return output;
+	"rest": {
+		targeted: false,
+		rolls: false,
+		resolve: function (event) {
+			event.actor_effects.suppression = -1;
+			event.actor_effects.stamina = 2;
+		},
+		print: function (event) {
+			var output = "";
+			
+			output += event.actor.printName() +" rests!";
+			output += "\n[i]"+ event.actor.name +" recieves "+
+				rend.printList(event.actor_effects, { showAlways: ["suppression"] }) +
+				".[/i]";
+				
+			return output;
+		},
 	},
-};
+}
+
+
+rend.mods = [
+	{
+		name: "attack_weight",
+		label: "attack weight",
+	},{
+		name: "defense_weight",
+		label: "defense weight",
+	},{
+		name: "impact",
+		effect: function impact (event, value){
+			if (event.isHit){
+				event.target_effects.suppression += value;
+			}
+		},
+	},{
+		key: "deflect",
+		effect: function deflect (event, value){
+			if (event.isHit){
+				value = Math.min(value, event.target_effects.damage);
+			
+				event.target_effects.damage -= value;
+				event.target_effects.suppression += value;
+			}
+		},
+	},{
+		name: "disperse",
+		effect: function disperse (event, value){
+			if (event.isHit){
+				value = Math.min(
+					value,
+					event.target_effects.damage,
+					Math.max(event.target.stamina - event.target_effects.stamina, 0)
+				);
+			
+				event.target_effects.damage -= value;
+				event.target_effects.stamina -= value;
+			}
+		},
+	},{
+		name: "kickback",
+		effect: function kickback (event, value){
+			if (event.isHit){
+				event.actor_effects.suppression += value;
+			}
+		},
+	},{
+		name: "feedback",
+		effect: function feedback (event, value){
+			if (event.isHit){
+				event.actor_effects.stamina -= value;
+			}
+		},
+	},{
+		name: "recoil",
+		effect: function recoil (event, value){
+			event.actor_costs.suppression += value;
+		},
+	},
+];
+
