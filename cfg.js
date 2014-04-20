@@ -17,18 +17,8 @@ cfg.core_stats = [
 ];
 
 cfg.attack_types = [
-	"area",
-	"direct",
-	"guided",
 	"melee",
-];
-// Modifiers that apply when you perform an action!
-cfg.action_mods = [
-	"attack_weight", 
-	"concussive",
-	"disruptive",
-	"recoil",
-	"stamina_cost",
+	"reach",
 ];
 
 cfg.defense_types = [
@@ -38,65 +28,11 @@ cfg.defense_types = [
 	"parry",
 ];
 
-// Modifiers that apply when someone targets you with an action!
-cfg.reaction_mods = [
-	"defense_weight", 
-	"deflection", 
-	"toughness", 
-	"kickback", 
-	"feedback",
-];
-
-// Modifiers that apply outside of actions (updates, etc).
-cfg.misc_mods = [
-	"stun_threshold",
-	"max_stamina",
-];
-
-// Keeps 'em in order!
-cfg.all_mods = [].concat(cfg.action_mods, cfg.reaction_mods, cfg.misc_mods);
-
 cfg.printColors = {
 	suppression: "blue",
 	stamina: "green",
 	damage: "orange",
 	alert: "red",
-};
-
-cfg.bbTags = {
-	"[b]": "<b>",
-	"[/b]": "</b>",
-	"[i]": "<i>",
-	"[/i]": "</i>",
-	"[u]": "<u>",
-	"[/u]": "</u>",
-	"\n": "<br>",
-	"[url=.+?]": function url (match){
-		var href = match.slice(5, -1);
-		return "<a href='"+ href +"' target='blank'>";
-	},
-	"[/url]": "</a>",
-	"[color=.+?]": function color (match){
-		var color = match.slice(7, -1);
-		return "<span style='color: "+ color +"'>";
-	},
-	"[/color]": "</span>",
-	"[user].+?[/user]": function (match){
-		var name = match.slice(6, -7),
-				nameURI = encodeURIComponent(name.toLowerCase());
-				
-		return "<a href='https://www.f-list.net/c/"+ nameURI +"' target='blank'>"+
-			name +"</a>";
-	},
-	"[icon].+?[/icon]": function (match){
-		var name = match.slice(6, -7),
-				nameURI = encodeURIComponent(name.toLowerCase());
-	
-		return "<a href='https://www.f-list.net/c/"+ nameURI +"' target='blank'>"+ 
-			"<img src='https://static.f-list.net/images/avatar/"+ nameURI +".png'"+
-			"class='portrait_link'>"+
-			"</a>";
-	},
 };
 
 // Valid BBCode Colors!
